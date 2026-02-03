@@ -1,0 +1,51 @@
+# PHASE 2: The "Edge of Chaos" Experiment
+# This config will be finalized once find_chaos.py identifies the boundary parameters.
+
+hh:
+  N: 300  # Larger network for better capacity
+  density: 0.2
+  conn_type: "dale"
+  # Base biology
+  C: 1.0; gNa: 120.0; ENa: 50.0; gK: 36.0; EK: -77.0
+  # Stability parameters (will be swept or fixed at critical values)
+  gL: 0.1   # Reduced leak? (To be confirmed)
+  gA: 20.0  # Variable? (To be confirmed)
+  EL: -54.4
+  EA: -80.0
+  tauA: 20.0
+  
+  # Synaptic
+  Eexc: 0.0; Einh: -80.0
+  tau_syn: 5.0; tau_in: 10.0
+  in_density: 0.2; in_gain: 5.0
+
+task:
+  dt: 0.05
+  symbol_ms: 20.0
+  narma_order: 10
+  xor_delay: 5    # Harder task
+  mc_max_lag: 20
+  lyap_window: [50, 250]
+  tau_trace: 20.0
+
+sweep_type: "phase2"
+
+# EDGE SWEEP DEFINITION
+# We cross the boundary found in Phase 1.
+# Example: If chaos is at gA=0 and stability at gA=20
+# We sweep gA to see the performance peak.
+
+# Control Parameter Sweep (Example)
+# gA_grid_phase2: [0.0, 2.0, 5.0, 10.0, 15.0, 20.0]
+# rho_grid_phase2: [1.0] (Fixed at destabilizing value)
+# bias_grid_phase2: [10.0] (Fixed at driving value)
+
+seeds_phase2: 5
+
+difficulty_levels:
+  - {xor_delay: 5, narma_order: 10, mc_max_lag: 20, label: "medium"}
+  - {xor_delay: 10, narma_order: 15, mc_max_lag: 30, label: "hard"}
+
+cv_folds: 5
+cache_dir: "cache"
+results_dir: "results"

@@ -22,12 +22,30 @@ from tasks.xor import DelayedXOR
 from tasks.mc import MemoryCapacity
 from tasks.lyapunov_task import LyapunovModule
 
-def run_trial(rho: float, bias: float, trial_idx: int, cfg: ExperimentConfig, base_seed: int = 2025) -> List[Dict[str, Any]]:
+def run_trial(N: int, gL: float, rho: float, bias: float, difficulty: dict, trial_idx: int, cfg: ExperimentConfig, base_seed: int = 2025) -> List[Dict[str, Any]]:
     """
-    Executes a single Trial (Seed Tuple) for a given (rho, bias).
+    Executes a single Trial (Seed Tuple) for a given (N, gL, rho, bias, difficulty).
     A Trial consists of 4 tasks run on the SAME reservoir instance (re-simulated/cached).
+    
+    Args:
+        N: Network size (number of neurons) - PHASE 1 parameter
+        gL: Leak conductance override - PHASE 1 parameter
+        rho: Spectral radius scaling
+        bias: External current (pA)
+        difficulty: Dict with {xor_delay, narma_order, mc_max_lag, label}
+        trial_idx: Seed identifier (0-based index)
+        cfg: Experiment configuration
     """
     results = []
+    
+    # Override N in config (for Phase 1 sweep)
+    cfg.hh.N = N
+    
+    # Override task difficulty (for Phase 1 scalable tasks)
+    cfg.task.xor_delay = difficulty.get('xor_delay', cfg.task.xor_delay)
+    cfg.task.narma_order = difficulty.get('narma_order', cfg.task.narma_order)
+    cfg.task.mc_max_lag = difficulty.get('mc_max_lag', cfg.task.mc_max_lag)
+    difficulty_label = difficulty.get('label', 'default')
     
     # 1. Setup RNG (Strict N=20 separation)
     rng_mgr = RNGManager(base_seed)
@@ -56,7 +74,7 @@ def run_trial(rho: float, bias: float, trial_idx: int, cfg: ExperimentConfig, ba
         spikes_nm = (trial_generators['in'].random(len(rates_up_nm)) < (rates_up_nm * cfg.task.dt * 1e-3)).astype(float)
         
         # Baseline logic is handled inside each block for clarity and state sync
-        state_nm = hh.simulate(rho, bias, spikes_nm, input_id_nm)
+        state_nm = hh.simulate(rho, bias, spikes_nm, input_id_nm, gL=gL)
         
         # Fallback length calc
         trim_steps = 500
@@ -143,11 +161,14 @@ def run_trial(rho: float, bias: float, trial_idx: int, cfg: ExperimentConfig, ba
 
         imp_nm = (base_nm - met_nm['nrmse']) / (base_nm + 1e-12)
         
-        # Schema - Base
-        res_base = dict(rho=rho, bias=bias, seed_tuple_id=trial_idx,
+        # Schema - Base (include N, gL, difficulty for Phase 1 tracking)
+        res_base = dict(N=N, gL=gL, rho=rho, bias=bias, difficulty=difficulty_label,
+                       seed_tuple_id=trial_idx,
                        seed_rec=seeds_tuple[0], seed_inmask=seeds_tuple[1], seed_in=seeds_tuple[2], seed_readout=seeds_tuple[3],
                        firing_rate=state_nm['mean_rate'], I_syn_mean=state_nm['mean_I_syn'], 
-                       I_syn_var=state_nm['var_I_syn'], saturation_flag=state_nm['saturation_flag'])
+                       I_syn_var=state_nm['var_I_syn'], saturation_flag=state_nm['saturation_flag'],
+                       cv_isi=state_nm.get('cv_isi', 0.0), ei_balance=state_nm.get('ei_balance_ratio', 0.0),
+                       mean_voltage=state_nm.get('mean_voltage', -65.0))
 
         results.append({**res_base, 'task': 'NARMA', 'metric': 'nrmse', 'value': met_nm['nrmse'], 'baseline': base_nm, 'improvement': imp_nm})
 
@@ -162,7 +183,7 @@ def run_trial(rho: float, bias: float, trial_idx: int, cfg: ExperimentConfig, ba
         rates_up_xor = np.repeat(rates_xor, steps_per_symbol)
         spikes_xor = (trial_generators['in'].random(len(rates_up_xor)) < (rates_up_xor * cfg.task.dt * 1e-3)).astype(float)
         
-        state_xor = hh.simulate(rho, bias, spikes_xor, input_id_xor)
+        state_xor = hh.simulate(rho, bias, spikes_xor, input_id_xor, gL=gL)
         expected_len_xor = (len(spikes_xor) - trim_steps) // steps_per_symbol
         
         if state_xor['mean_rate'] == 0:
@@ -180,10 +201,14 @@ def run_trial(rho: float, bias: float, trial_idx: int, cfg: ExperimentConfig, ba
         met_xor = readout.train_ridge_cv(phi_xor, y_xor, task_type='classification', alphas=cfg.ridge_alphas)
         base_xor = xor.compute_baseline(y_xor, readout)
         
-        res_base['firing_rate'] = state_xor['mean_rate'] # Update specific to this run
+        # Update bio-metrics for XOR
+        res_base['firing_rate'] = state_xor['mean_rate']
         res_base['I_syn_mean'] = state_xor['mean_I_syn']
         res_base['I_syn_var'] = state_xor['var_I_syn']
         res_base['saturation_flag'] = state_xor['saturation_flag']
+        res_base['cv_isi'] = state_xor.get('cv_isi', 0.0)
+        res_base['ei_balance'] = state_xor.get('ei_balance_ratio', 0.0)
+        res_base['mean_voltage'] = state_xor.get('mean_voltage', -65.0)
         
         results.append({**res_base, 'task': 'XOR', 'metric': 'accuracy', 'value': met_xor.get('acc', 0.5), 'baseline': base_xor, 'improvement': met_xor.get('acc', 0.5) - base_xor})
         results.append({**res_base, 'task': 'XOR', 'metric': 'auc', 'value': met_xor.get('auc', 0.5), 'baseline': 0.5, 'improvement': met_xor.get('auc', 0.5) - 0.5})
@@ -199,7 +224,7 @@ def run_trial(rho: float, bias: float, trial_idx: int, cfg: ExperimentConfig, ba
         rates_up_mc = np.repeat(rates_mc, steps_per_symbol)
         spikes_mc = (trial_generators['in'].random(len(rates_up_mc)) < (rates_up_mc * cfg.task.dt * 1e-3)).astype(float)
         
-        state_mc = hh.simulate(rho, bias, spikes_mc, input_id_mc)
+        state_mc = hh.simulate(rho, bias, spikes_mc, input_id_mc, gL=gL)
         expected_len_mc = (len(spikes_mc) - trim_steps) // steps_per_symbol
         
         if state_mc['mean_rate'] == 0:
@@ -218,10 +243,14 @@ def run_trial(rho: float, bias: float, trial_idx: int, cfg: ExperimentConfig, ba
         # Pass dedicated RNG for shuffling logic
         base_mc = mc.compute_baseline(u_mc, phi_mc, readout, rng_shuffle=trial_generators['readout'], max_lag=cfg.task.mc_max_lag)
         
+        # Update bio-metrics for MC
         res_base['firing_rate'] = state_mc['mean_rate']
         res_base['I_syn_mean'] = state_mc['mean_I_syn']
         res_base['I_syn_var'] = state_mc['var_I_syn']
         res_base['saturation_flag'] = state_mc['saturation_flag']
+        res_base['cv_isi'] = state_mc.get('cv_isi', 0.0)
+        res_base['ei_balance'] = state_mc.get('ei_balance_ratio', 0.0)
+        res_base['mean_voltage'] = state_mc.get('mean_voltage', -65.0)
         
         results.append({**res_base, 'task': 'MC', 'metric': 'capacity', 'value': res_mc['mc'], 'baseline': base_mc, 'improvement': res_mc['mc'] - base_mc})
 
@@ -237,7 +266,7 @@ def run_trial(rho: float, bias: float, trial_idx: int, cfg: ExperimentConfig, ba
         spikes_wu = (trial_generators['in'].random(steps_wu) < (np.repeat(rates_wu, steps_per_symbol)[:steps_wu] * cfg.task.dt * 1e-3)).astype(np.float32)
         
         # trim_steps=0 because we want the final state exactly after this input
-        res_wu = hh.simulate(rho, bias, spikes_wu, cfg.get_task_input_id() + "_WU", trim_steps=0)
+        res_wu = hh.simulate(rho, bias, spikes_wu, cfg.get_task_input_id() + "_WU", trim_steps=0, gL=gL)
         start_state = res_wu['final_state']
         
         # 2. Parallel Trajectories starting from same point on attractor
@@ -247,24 +276,28 @@ def run_trial(rho: float, bias: float, trial_idx: int, cfg: ExperimentConfig, ba
         spikes_l = (trial_generators['in'].random(len_lyap * steps_per_symbol) < (np.repeat(rates_l, steps_per_symbol) * cfg.task.dt * 1e-3)).astype(np.float32)
         
         # Reference
-        state_l1 = hh.simulate(rho, bias, spikes_l, cfg.get_task_input_id() + "_L_ref", trim_steps=0, full_state=start_state)
+        state_l1 = hh.simulate(rho, bias, spikes_l, cfg.get_task_input_id() + "_L_ref", trim_steps=0, full_state=start_state, gL=gL)
         phi1 = filter_and_downsample(state_l1['spikes'], steps_per_symbol, cfg.task.dt, cfg.task.tau_trace).astype(np.float32)
         
         # Perturbed (Deep copy of state dict)
         perturbed_state = {k: v.copy() if isinstance(v, np.ndarray) else v for k, v in start_state.items()}
         perturbed_state['V'][0] += cfg.task.lyap_eps
         
-        state_l2 = hh.simulate(rho, bias, spikes_l, cfg.get_task_input_id() + "_L_pert", trim_steps=0, full_state=perturbed_state)
+        state_l2 = hh.simulate(rho, bias, spikes_l, cfg.get_task_input_id() + "_L_pert", trim_steps=0, full_state=perturbed_state, gL=gL)
         phi2 = filter_and_downsample(state_l2['spikes'], steps_per_symbol, cfg.task.dt, cfg.task.tau_trace).astype(np.float32)
         
         step_s = (steps_per_symbol * cfg.task.dt) / 1000.0
         slope = lyap.compute_lambda(phi1, phi2, window_range=cfg.task.lyap_window)
         lambda_val_sec = slope / step_s 
         
+        # Update bio-metrics for Lyapunov
         res_base['firing_rate'] = state_l1['mean_rate']
         res_base['I_syn_mean'] = state_l1['mean_I_syn']
         res_base['I_syn_var'] = state_l1['var_I_syn']
         res_base['saturation_flag'] = state_l1['saturation_flag']
+        res_base['cv_isi'] = state_l1.get('cv_isi', 0.0)
+        res_base['ei_balance'] = state_l1.get('ei_balance_ratio', 0.0)
+        res_base['mean_voltage'] = state_l1.get('mean_voltage', -65.0)
 
         results.append({**res_base, 'task': 'Lyapunov', 'metric': 'lambda_step', 'value': slope, 'baseline': 0.0, 'improvement': 0.0})
         results.append({**res_base, 'task': 'Lyapunov', 'metric': 'lambda_sec', 'value': lambda_val_sec, 'baseline': 0.0, 'improvement': 0.0})
@@ -279,43 +312,91 @@ def run_trial(rho: float, bias: float, trial_idx: int, cfg: ExperimentConfig, ba
         
     return results
 
-def run_experiment(cfg_path: str):
+def run_experiment(cfg_path: str, workers: int = None):
     cfg = load_config(cfg_path)
     os.makedirs(cfg.results_dir, exist_ok=True)
     
-    # 1. Define Sweep Space
+    # 1. Define Sweep Space (Traditional vs Phase 1)
     tasks_to_run = []
     
-    if cfg.sweep_mode == 'coarse':
+    if cfg.sweep_type == "phase1":
+        # PHASE 1: Multi-dimensional sweep (N × gL × rho × bias × difficulty × seed)
+        difficulties = cfg.difficulty_levels if hasattr(cfg, 'difficulty_levels') and cfg.difficulty_levels else [
+            {"xor_delay": 5, "narma_order": 10, "mc_max_lag": 20, "label": "default"}
+        ]
+        
+        print(f"Initializing PHASE 1 SWEEP:")
+        print(f"  N ∈ {cfg.N_grid} ({len(cfg.N_grid)} values)")
+        print(f"  gL ∈ {cfg.gL_grid} ({len(cfg.gL_grid)} values)")
+        print(f"  rho ∈ {cfg.rho_grid_phase1} ({len(cfg.rho_grid_phase1)} values)")
+        print(f"  bias ∈ {cfg.bias_grid_phase1} ({len(cfg.bias_grid_phase1)} values)")
+        print(f"  difficulty levels: {[d['label'] for d in difficulties]}")
+        print(f"  seeds: {cfg.seeds_phase1}")
+        
+        total_trials = (len(cfg.N_grid) * len(cfg.gL_grid) * len(cfg.rho_grid_phase1) * 
+                       len(cfg.bias_grid_phase1) * len(difficulties) * cfg.seeds_phase1)
+        print(f"  TOTAL TRIALS: {total_trials}")
+        
+        for N in cfg.N_grid:
+            for gL in cfg.gL_grid:
+                for rho in cfg.rho_grid_phase1:
+                    for bias in cfg.bias_grid_phase1:
+                        for diff in difficulties:
+                            for seed_idx in range(cfg.seeds_phase1):
+                                # Store as tuple: (N, gL, rho, bias, difficulty_dict, seed_idx)
+                                tasks_to_run.append((N, gL, rho, bias, diff, seed_idx))
+    
+    elif cfg.sweep_mode == 'coarse':
+        # TRADITIONAL SWEEP (rho × bias × seed) - uses default difficulty
         rhos = cfg.rho_grid_coarse
         biases = cfg.bias_grid_coarse
         seeds = range(cfg.seeds_coarse if hasattr(cfg, 'seeds_coarse') else 5)
+        default_diff = {"xor_delay": cfg.task.xor_delay, "narma_order": cfg.task.narma_order, 
+                       "mc_max_lag": cfg.task.mc_max_lag, "label": "default"}
+        
+        print(f"Initializing COARSE Sweep: {len(rhos)}×{len(biases)}×{len(seeds)}")
+        
+        for r in rhos:
+            for b in biases:
+                for s in seeds:
+                    tasks_to_run.append((cfg.hh.N, cfg.hh.gL, r, b, default_diff, s))
+    
     else:
-        # Fine Sweep logic would be here (usually loaded from a separate fine config or dynamic)
-        # For now assume config defines specific grids
-        rhos = cfg.rho_grid_coarse # Or define fine grid in config
+        # Fine Sweep logic
+        rhos = cfg.rho_grid_coarse
         biases = cfg.bias_grid_coarse
         seeds = range(cfg.seeds_fine)
-
-    print(f"Initializing {cfg.sweep_mode.upper()} Sweep: {len(rhos)}x{len(biases)}x{len(seeds)}")
-    
-    for r in rhos:
-        for b in biases:
-            for s in seeds:
-                tasks_to_run.append((r, b, s))
+        default_diff = {"xor_delay": cfg.task.xor_delay, "narma_order": cfg.task.narma_order, 
+                       "mc_max_lag": cfg.task.mc_max_lag, "label": "default"}
+        
+        print(f"Initializing FINE Sweep: {len(rhos)}×{len(biases)}×{len(seeds)}")
+        
+        for r in rhos:
+            for b in biases:
+                for s in seeds:
+                    tasks_to_run.append((cfg.hh.N, cfg.hh.gL, r, b, default_diff, s))
                 
     # 2. Execute Parallel - UNLEASHED
     all_results = []
-    max_workers = min(60, os.cpu_count() - 2)
+    
+    # Use provided workers or default to CPU count without arbitrary cap
+    if workers is None:
+        max_workers = os.cpu_count()
+    else:
+        max_workers = workers
+        
+    print(f"🚀 LAUNCHING EXPERIMENT WITH {max_workers} WORKERS (High Performance Mode)")
     
     # Live stats tracking for Research Engineer verification
     stats = {'NM': [], 'XOR': [], 'MC': [], 'LY': [], 'FR': []}
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(run_trial, r, b, s, cfg): (r, b, s) for r, b, s in tasks_to_run}
+        # Unpack 6-tuple: (N, gL, rho, bias, difficulty, seed_idx)
+        futures = {executor.submit(run_trial, *task, cfg): task for task in tasks_to_run}
         
         for i, future in enumerate(as_completed(futures)):
-            r, b, s = futures[future]
+            task_tuple = futures[future]
+            N, gL, r, b, diff, s = task_tuple  # Unpack for reporting
             try:
                 res = future.result()
                 all_results.extend(res)
@@ -337,13 +418,13 @@ def run_experiment(cfg_path: str):
                     avg_ly = np.mean(stats['LY'][-5:]) if stats['LY'] else 0
                     
                     print(f"\n[INTERMEDIATE REPORT {i+1}/{len(futures)}]")
-                    print(f" > Params: rho={r:.2f}, bias={b:.2f}")
+                    print(f" > Params: N={N}, gL={gL:.3f}, rho={r:.2f}, bias={b:.2f}")
                     print(f" > Bio: Firing Rate = {avg_fr:.2f} Hz {'(OK)' if 1<avg_fr<50 else '(CRITICAL)'}")
                     print(f" > Chaos: Mean Lambda = {avg_ly:.3f} s^-1")
                     print(f" > Task Score: NARMA={avg_nm:.3f}, XOR={avg_xr:.2f}, MC={avg_mc:.2f}")
                     print("------------------------------------------")
             except Exception as e:
-                print(f"CRITICAL FAIL on {r, b, s}: {e}")
+                print(f"CRITICAL FAIL on {task_tuple}: {e}")
                 
     # 3. Save Parquet
     df = pd.DataFrame(all_results)
@@ -359,5 +440,23 @@ def run_experiment(cfg_path: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="config.yaml")
+    parser.add_argument("--workers", type=int, default=None, help="Number of parallel workers (default: all cores)")
     args = parser.parse_args()
-    run_experiment(args.config)
+    
+    # 1. Force single-threaded BLAS to avoid oversubscription
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    
+    # Store workers in global context or pass to run_experiment (modifying signature not strictly needed if we patch logic)
+    # Better: Pass args to run_experiment.
+    # Currently run_experiment takes only cfg_path.
+    # We will modify run_experiment logic to look for 'workers' inside 'args' (need to refactor slightly or pass global)
+    # Simplest: Update run_experiment signature or hack:
+    
+    # Actually, let's just make run_experiment accept optional workers
+    run_experiment(args.config, workers=args.workers)
+
+# We need to change run_experiment signature definition too!
+# See below replacement for run_experiment definition
+

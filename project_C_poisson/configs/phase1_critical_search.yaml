@@ -1,0 +1,86 @@
+# PHASE 1: Critical Point Localization Config
+# Objective: Find parameter region where λ transitions from negative to positive
+# Success criteria: XOR > 0.6, |λ| < 0.01, firing_rate ∈ [1, 50] Hz
+
+# Network configurations (HH model with A-current)
+hh:
+  N: 100  # Will be overridden by N_grid sweep
+  density: 0.2
+  conn_type: "dale"  # 80% E, 20% I
+  
+  # Conductances (biological values from Shriki et al., 2003)
+  C: 1.0
+  gNa: 120.0
+  ENa: 50.0
+  gK: 36.0
+  EK: -77.0
+  gL: 0.3  # Will be overridden by gL_grid sweep
+  EL: -54.4
+  gA: 20.0  # A-current (spike-frequency adaptation)
+  EA: -80.0
+  tauA: 20.0
+  
+  # Synaptic
+  Eexc: 0.0
+  Einh: -80.0
+  tau_syn: 5.0
+  tau_in: 10.0
+  
+  # Input
+  in_density: 0.2
+  in_gain: 5.0
+
+# Task parameters
+task:
+  poisson_rate_min: 10.0
+  poisson_rate_max: 150.0
+  dt: 0.05  # ms (400 steps per 20ms symbol)
+  symbol_ms: 20.0
+  
+  narma_order: 10
+  xor_delay: 5  # Trudniejsze: wymaga pamięci 5 symboli (100ms)
+  mc_max_lag: 20
+  
+  lyap_window: [50, 250]  # Skip transient
+  lyap_eps: 1.0e-6
+  zscore_features: true
+  tau_trace: 20.0
+
+# ESN baseline (for comparison in Phase 2)
+esn:
+  N: 100
+  spectral_radius: 0.95
+  input_scale: 1.0
+  density: 0.1
+  leaking_rate: 1.0
+
+# PHASE 1 SWEEP CONFIGURATION
+sweep_type: "phase1"
+
+# Multi-dimensional parameter grid (N × gL × rho × bias)
+N_grid: [100, 300, 1000]  # Network size scaling
+gL_grid: [0.3, 0.15, 0.075]  # Leak conductance: baseline, 50%, 25%
+rho_grid_phase1: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0]  # Spectral radius (log-spaced)
+bias_grid_phase1: [0.0, 5.0, 10.0, 20.0]  # External current (pA)
+seeds_phase1: 3  # Quick validation per point
+
+# DIFFICULTY LEVELS (scalable task complexity)
+difficulty_levels:
+  - {xor_delay: 3, narma_order: 5, mc_max_lag: 10, label: "easy"}
+  - {xor_delay: 5, narma_order: 10, mc_max_lag: 20, label: "medium"}
+  - {xor_delay: 10, narma_order: 15, mc_max_lag: 30, label: "hard"}
+
+# Total trials: 3 (N) × 3 (gL) × 8 (rho) × 4 (bias) × 3 (difficulty) × 3 (seeds) = 2592
+# Estimated time: ~6 hours on 60-core server
+
+# Readout (Ridge Regression with cross-validation)
+cv_folds: 5
+cv_gap: 10  # Temporal gap to prevent leakage
+ridge_alphas: [1.0e-6, 1.0e-4, 1.0e-2, 1.0, 10.0, 100.0]
+
+# Paths
+cache_dir: "/app/cache"
+results_dir: "/app/results"
+
+# Legacy field (ignored in phase1)
+sweep_mode: "phase1"

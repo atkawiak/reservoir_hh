@@ -58,28 +58,31 @@ class HHModel:
         an, bn = alpha_n_safe(V), beta_n_safe(V)
         return am/(am+bm), ah/(ah+bh), an/(an+bn)
 
-    def get_cache_key(self, rho: float, bias: float, task_input_id: str, len_input: int) -> str:
-        """Cache key including seeds, params, and input length."""
-        key = f"{rho}_{bias}_{self.seeds_tuple}_{self.cfg.hh.N}_{task_input_id}_{self.cfg.task.dt}_{len_input}"
+    def get_cache_key(self, rho: float, bias: float, task_input_id: str, len_input: int, gL: Optional[float] = None) -> str:
+        """Cache key including seeds, params, and input length.
+        
+        Args:
+            gL: Leak conductance (Phase 1). If None, uses cfg.hh.gL.
+        """
+        gL_eff = gL if gL is not None else self.cfg.hh.gL
+        key = f"{rho}_{bias}_{gL_eff}_{self.seeds_tuple}_{self.cfg.hh.N}_{task_input_id}_{self.cfg.task.dt}_{len_input}"
         return hashlib.sha1(key.encode()).hexdigest()
 
     def simulate(self, rho: float, bias: float, spikes_in: np.ndarray, 
                  task_input_id: str, trim_steps: int = 500,
-                 full_state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Runs HH simulation with full state control for rigorous branching."""
-        # Check Cache (Skip if full_state provided as it implies branching/warmup)
-        if full_state is None:
-            cache_key = self.get_cache_key(rho, bias, task_input_id, len(spikes_in))
-            cache_path = os.path.join(self.cfg.cache_dir, f"{cache_key}.pkl")
-            if os.path.exists(cache_path):
-                try:
-                    return joblib.load(cache_path)
-                except:
-                    pass
-
+                 full_state: Optional[Dict[str, Any]] = None,
+                 gL: Optional[float] = None) -> Dict[str, Any]:
+        """Runs HH simulation with full state control for rigorous branching.
+        
+        Args:
+            gL: Leak conductance override (for Phase 1 sweep). If None, uses cfg.hh.gL
+        """
         W_eff = self.W_rec * rho
         N, dt = self.cfg.hh.N, self.cfg.task.dt
         p = self.cfg.hh
+        
+        # Override gL if provided (Phase 1 sweep)
+        gL_eff = gL if gL is not None else p.gL
         
         # State Initialization
         if full_state is not None:
@@ -104,6 +107,12 @@ class HHModel:
         syn_stats = {'sum_I': 0.0, 'sq_sum': 0.0, 'count': 0}
         saturation_count = 0
         
+        # Bio-plausibility tracking
+        last_spike_time = np.full(N, -np.inf)  # Track ISI for CV calculation
+        isi_list = [[] for _ in range(N)]  # Store ISIs per neuron
+        v_trace = np.zeros(len(spikes_in)) # To be used for Lyapunov
+        I_exc_total, I_inh_total = 0.0, 0.0  # E/I balance
+        
         for t in range(len(spikes_in)):
             V_old = V.copy()
             s_in_trace = s_in_trace * decay_in + spikes_in[t]
@@ -123,9 +132,10 @@ class HHModel:
             I_syn = np.maximum(0, syn)*(V-p.Eexc) + np.maximum(0, -syn)*(V-p.Einh)
             
             # Integration
-            dV = (-p.gNa*(m**3)*h*(V-p.ENa) - p.gK*(n**4)*(V-p.EK) - p.gL*(V-p.EL) 
+            dV = (-p.gNa*(m**3)*h*(V-p.ENa) - p.gK*(n**4)*(V-p.EK) - gL_eff*(V-p.EL) 
                   - p.gA*(a_inf**3)*b_gate*(V-p.EA) - I_syn + I_pulse) / p.C
             V += dt * dV
+            v_trace[t] = np.mean(V) # Collection for Lyapunov
             
             # Saturation Check
             if np.any(np.abs(V) > 100): 
@@ -141,6 +151,22 @@ class HHModel:
                 syn_stats['sum_I'] += np.mean(I_syn)
                 syn_stats['sq_sum'] += np.mean(I_syn**2)
                 syn_stats['count'] += 1
+                
+                # Bio-metrics: E/I currents, voltage sampling
+                I_exc = np.maximum(0, syn) * (V - p.Eexc)
+                I_inh = np.maximum(0, -syn) * (V - p.Einh)
+                I_exc_total += np.abs(np.mean(I_exc))
+                I_inh_total += np.abs(np.mean(I_inh))
+                
+                if (t - trim_steps) % 50 == 0:  # Sample every 50 steps
+                    pass # voltage_samples was removed in favor of v_trace
+            
+            # Track ISIs for CV calculation
+            for neuron_idx in np.where(spks)[0]:
+                if last_spike_time[neuron_idx] > -np.inf:
+                    isi = (t - last_spike_time[neuron_idx]) * dt  # ms
+                    isi_list[neuron_idx].append(isi)
+                last_spike_time[neuron_idx] = t
 
         # Trimming
         trimmed_spikes = res_spikes[trim_steps:]
@@ -156,18 +182,32 @@ class HHModel:
             'b_gate': b_gate.copy(), 's_trace': s_trace.copy(), 's_in_trace': s_in_trace
         }
 
+        # Compute biological plausibility metrics
+        # 1. CV of ISI (Coefficient of Variation)
+        cv_values = []
+        for neuron_isis in isi_list:
+            if len(neuron_isis) > 1:
+                cv = np.std(neuron_isis) / (np.mean(neuron_isis) + 1e-9)
+                cv_values.append(cv)
+        mean_cv = np.mean(cv_values) if len(cv_values) > 0 else 0.0
+        
+        # compute biological plausibility metrics
+        # ... CV ...
+        mean_cv = np.mean(cv_values) if len(cv_values) > 0 else 0.0
+        ei_balance = I_exc_total / (I_inh_total + 1e-9) if valid_steps > 0 else 0.0
+        mean_voltage = np.mean(v_trace[trim_steps:]) if valid_steps > 0 else -65.0
+        
         result = {
             'spikes': trimmed_spikes,
+            'v_trace': v_trace[trim_steps:],  # NEW: Continuous trace for Lyapunov
             'mean_rate': (np.sum(trimmed_spikes) / (valid_steps * dt * 1e-3)) / N if valid_steps > 0 else 0.0,
             'mean_I_syn': mean_I,
             'var_I_syn': var_I,
             'saturation_flag': (saturation_count / len(spikes_in)) > 0.01,
-            'final_state': final_state
+            'final_state': final_state,
+            'cv_isi': mean_cv,
+            'ei_balance_ratio': ei_balance,
+            'mean_voltage': mean_voltage
         }
-        
-        # Save Cache (Only if full_state is None)
-        if full_state is None:
-            os.makedirs(self.cfg.cache_dir, exist_ok=True)
-            joblib.dump(result, cache_path)
         
         return result

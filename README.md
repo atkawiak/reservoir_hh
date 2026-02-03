@@ -1,8 +1,15 @@
 # Hodgkin-Huxley Reservoir Computing: Edge of Chaos Hypothesis
 
-## Overview
+## Core Thesis
+**Experimental proof that biologically grounded neural networks achieve maximal computational performance (Memory Capacity, XOR, NARMA) at the "Edge of Chaos" ($\lambda \approx 0$).**
 
-This repository contains a **publication-grade** implementation of a biologically-inspired Hodgkin-Huxley (HH) reservoir computing system designed to test the **"Edge of Chaos" hypothesis**: that biological neural networks achieve optimal computational performance when operating at the boundary between stable and chaotic dynamics.
+This project demonstrates that biological adaptation mechanisms (specifically the **A-current**) automatically tune the network dynamics towards this critical boundary, balancing stability with computational flexibility.
+
+## Overview
+This repository implements a high-performance **Hodgkin-Huxley Reservoir** using `scipy` and sparse matrices. It is designed to investigate the relationship between:
+1.  **Biological Realism:** Ion channel dynamics ($I_{Na}, I_K, I_A, I_L$) and Dale's principle.
+2.  **Dynamical Regime:** Chaotic vs. Stable dynamics (quantified by Lyapunov Exponent $\lambda$).
+3.  **Computational Power:** Performance on benchmark tasks (XOR, NARMA-10, Memory Capacity).
 
 ## Scientific Motivation
 

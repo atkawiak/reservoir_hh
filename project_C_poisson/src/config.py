@@ -63,11 +63,29 @@ class ESNConfig:
 @dataclass
 class ExperimentConfig:
     """Experiment Execution Control"""
-    # Sweep Grids - Coarse
-    rho_grid_coarse: List[float] = field(default_factory=lambda: [0.01, 1.5]) # Range forROI
+    # Sweep Type: 'traditional' (rho/bias only) or 'phase1' (N, gL, rho, bias)
+    sweep_type: str = "traditional"  # 'traditional', 'phase1', 'phase2'
+    
+    # Traditional Sweep Grids
+    rho_grid_coarse: List[float] = field(default_factory=lambda: [0.01, 1.5])
     bias_grid_coarse: List[float] = field(default_factory=lambda: [0.0, 8.0])
     seeds_coarse: int = 5
     seeds_fine: int = 20
+    
+    # PHASE 1 GRIDS (Critical Point Localization)
+    N_grid: List[int] = field(default_factory=lambda: [100])  # Network size sweep
+    gL_grid: List[float] = field(default_factory=lambda: [0.3])  # Leak conductance sweep
+    rho_grid_phase1: List[float] = field(default_factory=lambda: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0])
+    bias_grid_phase1: List[float] = field(default_factory=lambda: [0.0, 5.0, 10.0, 20.0])
+    seeds_phase1: int = 3
+    
+    # DIFFICULTY LEVELS (scalable task complexity)
+    # Each dict: {xor_delay, narma_order, mc_max_lag, label}
+    difficulty_levels: List[dict] = field(default_factory=lambda: [
+        {"xor_delay": 3, "narma_order": 5, "mc_max_lag": 10, "label": "easy"},
+        {"xor_delay": 5, "narma_order": 10, "mc_max_lag": 20, "label": "medium"},
+        {"xor_delay": 10, "narma_order": 15, "mc_max_lag": 30, "label": "hard"}
+    ])
     
     # Readout
     cv_folds: int = 5
@@ -80,7 +98,7 @@ class ExperimentConfig:
     # Paths
     cache_dir: str = "cache"
     results_dir: str = "results"
-    sweep_mode: str = "coarse" # 'coarse', 'fine'
+    sweep_mode: str = "coarse" # 'coarse', 'fine'  # Legacy field, use sweep_type instead
 
     hh: HHConfig = field(default_factory=HHConfig)
     task: TaskConfig = field(default_factory=TaskConfig)
@@ -101,8 +119,10 @@ def load_config(path: str) -> ExperimentConfig:
     
     hh_data = data.pop('hh', {})
     task_data = data.pop('task', {})
+    esn_data = data.pop('esn', {})
     
     cfg = ExperimentConfig(**data)
     cfg.hh = HHConfig(**hh_data)
     cfg.task = TaskConfig(**task_data)
+    cfg.esn = ESNConfig(**esn_data)
     return cfg

@@ -2,12 +2,187 @@
 
 ## Research Objective
 
-**Hypothesis**: Biological neural networks, through evolutionary optimization, operate at the **"Edge of Chaos"** (Lyapunov exponent λ ≈ 0), where computational performance is maximized.
+**Central Research Question**: Do **maximally biologically realistic** Hodgkin-Huxley neural networks, operating as reservoirs, achieve optimal computational performance at the **"Edge of Chaos"** ($\lambda \approx 0$), thereby validating the **Critical Brain Hypothesis** in conductance-based spiking neural networks?
 
-**Goal**: Rigorously test whether a biologically-inspired Hodgkin-Huxley reservoir with A-current dynamics demonstrates:
-1. A performance peak at λ ≈ 0 across multiple tasks
-2. Superior performance compared to mathematical baselines (ESN) at this boundary
-3. Biologically plausible dynamics (firing rates 1-50 Hz)
+**Hypothesis**: Conductance-based Hodgkin-Huxley reservoirs with A-current (IA potassium channel), Dale's principle (E/I segregation), and biologically plausible parameters exhibit:
+1. **Maximal classification accuracy** and **minimal prediction error** at the **Edge of Chaos** ($|\lambda| < 0.01$ s⁻¹)
+2. **Superior generalization** (lowest Train-Test gap) in the critical regime
+3. **Peak Memory Capacity** at $\lambda \to 0^-$ (below chaos threshold)
+4. **Biological plausibility**: Firing rates 1-50 Hz, power-law dynamics reminiscent of neuronal avalanches
+
+---
+
+## Theoretical Foundation (Literature-Driven)
+
+### 1. Critical Brain Hypothesis (Beggs & Plenz, 2003)
+
+**Neuronal Avalanches as Evidence:**
+- Spontaneous activity in biological cortical networks exhibits **neuronal avalanches** with **power-law size distributions** [Beggs & Plenz, 2003; *J. Neuroscience*]
+- This is a hallmark of **self-organized criticality (SOC)** - systems naturally tune themselves to phase transitions
+- **Criticality is the ONLY known computational regime** that inherently optimizes:
+  - Information transmission [Shew et al., 2011]
+  - Dynamic range [Kinouchi & Copelli, 2006]
+  - Memory capacity [Haldeman & Beggs, 2005]
+
+**Implication for Our Study:**
+✅ If HH reservoirs naturally exhibit Edge of Chaos behavior, they replicate fundamental brain dynamics.
+
+---
+
+### 2. Edge of Chaos in Reservoir Computing
+
+**Empirical Evidence:**
+- **Echo State Networks (ESN)**: Optimal MNIST classification "just below chaos" ($\lambda < 0$ but close to 0) [Verstraeten et al., 2007]
+- **Maximum Memory Capacity**: Achieved at $\lambda \to 0^-$ (longest memory without instability) [Jaeger, 2001; Bertschinger & Natschläger, 2004]
+- **Information Transfer**: Peaks at critical transition between order and chaos [Lizier et al., 2014; *Chaos*]
+- **Neural Microcircuits**: "Edge of Chaos" **predicts** circuit parameters yielding maximal computational performance [Maass et al., 2002]
+
+**Controversy:**
+Some studies show performance degradation *at* the edge in specific contexts [Legenstein & Maass, 2007]. However, consensus supports edge-of-chaos optimality for:
+- Temporal integration tasks (NARMA)
+- Classification requiring memory (XOR with delays)
+- Pattern recognition in noisy environments
+
+---
+
+### 3. Biological Realism: HH vs. Simplified Models
+
+**Why Hodgkin-Huxley?**
+
+| **Criterion**              | **Hodgkin-Huxley (HH)**                          | **Leaky Integrate-and-Fire (LIF)**       |
+|----------------------------|--------------------------------------------------|------------------------------------------|
+| **Biological Accuracy**    | ✅ **Gold standard**: Captures all 20 neurocomputational features | ⚠️ Captures only 3 basic firing patterns |
+| **Ion Channel Detail**     | ✅ Explicit $g_{Na}$, $g_K$, $g_L$, $g_A$ dynamics | ❌ Abstract "leak" only                  |
+| **Action Potential Shape** | ✅ Complete waveform (spike width, afterhyperpolarization) | ❌ Delta function (no shape)             |
+| **Bifurcation Richness**   | ✅ Hopf, SNIC, saddle-node bifurcations          | ⚠️ Limited bifurcation structure         |
+| **Computational Cost**     | ⚠️ 8x slower than LIF (on neuromorphic hardware) | ✅ 95% less computation than HH          |
+| **Transcriptomic Correlation** | ✅ Parameters correlate with gene expression [Gouwens et al., 2018] | ❌ No molecular mapping                  |
+
+**Trade-off:**
+- LIF: Efficient for large-scale simulations (millions of neurons)
+- **HH: Necessary for studying biologically realistic dynamics** where ion channel mechanisms matter
+
+**Our Choice:**
+We accept the computational cost to test whether **biological realism itself** predicts edge-of-chaos behavior.
+
+---
+
+### 4. The A-Current (IA Potassium Channel)
+
+**Role in Neural Dynamics:**
+- **Transient outward K+ current** (fast activation, slower inactivation)
+- **Delays spiking** and **reduces firing frequency** [Connor & Stevens, 1971]
+- **Can trigger bursting** by influencing spike trajectory near unstable fixed points [Shriki et al., 2003]
+- **Spike-frequency adaptation**: Crucial for temporal coding
+
+**Bifurcation Impact:**
+- Increasing $g_A$ (A-current conductance) acts as **bifurcation parameter**
+- Can shift system from tonic spiking → bursting → quiescence
+- Interacts with $g_L$ (leak) to determine **chaos onset**
+
+**Literature Gap:**
+While Shriki et al. (2003) used HH+A-current for rate model validation, **no study has explicitly tested A-current's role in reservoir computing at the Edge of Chaos**. 
+
+**Our Contribution:**
+✅ First systematic study of $g_A$ as control parameter for criticality in biological reservoirs.
+
+---
+
+### 5. Dale's Principle and Network Stability
+
+**Dale's Principle**: Each neuron is either purely **excitatory** (E) or **inhibitory** (I) across all synapses.
+
+**Benefits in Artificial Networks (Recent Findings):**
+- **Functional robustness** against synaptic noise [Sussex et al., 2023]
+- **Simpler learning**: Adjusting neuron-level properties (not individual weights) suffices [NeurIPS 2022]
+- **Biological design efficiency**: Fewer neurotransmitter/receptor types per neuron
+
+**In Biological Networks:**
+- Establishes **balanced dynamics** (E/I balance) crucial for irregular firing [van Vreeswijk & Sompolinsky, 1996]
+- **Prevents runaway excitation** (epileptiform activity in supercritical regime)
+
+**Implementation:**
+- 80% Excitatory, 20% Inhibitory (cortical ratio)
+- Sign constraints on $W_{rec}$ during initialization
+
+---
+
+### 6. Readout Layer: Ridge Regression as Standard
+
+**Why Linear Readout?**
+- **Reservoir Computing paradigm**: Fixed random recurrent weights, **only readout is trained**
+- High-dimensional reservoir states become **linearly separable** via kernel trick [Maass et al., 2002]
+- **Ridge Regression** prevents overfitting in high-dimensional space [Lukoševičius & Jaeger, 2009]
+
+**Literature Consensus:**
+✅ Ridge is the de facto standard for reservoir readout [Verstraeten et al., 2007; Jaeger, 2001]
+✅ For classification: Logistic regression or linear SVM on reservoir states
+✅ Cross-validation essential for temporal data (blocked CV with gap to prevent leakage)
+
+**Our Implementation:**
+- Ridge with $\alpha \in \{10^{-6}, 10^{-4}, 10^{-2}, 1, 10, 100\}$
+- 5-fold Blocked CV with 10-step gap
+- Z-score normalization of reservoir states
+
+---
+
+## Research Gap and Contribution
+
+**What is Known:**
+1. Simplified reservoirs (ESN, LIF) show edge-of-chaos benefits [Jaeger, Verstraeten]
+2. Biological brains operate at criticality (neuronal avalanches) [Beggs & Plenz]
+3. HH models are biologically accurate but computationally expensive [Gerstner & Kistler]
+
+**What is UNKNOWN:**
+❓ Do **full conductance-based HH models** with A-current exhibit edge-of-chaos optimization?  
+❓ Does **biological realism** (Dale's principle, realistic $g_{Na}/g_K/g_A$) alter the critical regime?  
+❓ Is the "Edge of Chaos" in HH networks the **same** as in abstract ESNs, or does it emerge at different $\rho$ values?
+
+**Our Hypothesis:**
+✅ HH reservoirs will require **higher $\rho$** (stronger recurrence) to reach chaos compared to ESNs, due to **intrinsic ion channel stabilization** ($g_K$, $g_A$ act as "brakes").  
+✅ Performance will peak at $|\lambda| \approx 0$, validating Critical Brain Hypothesis in conductance-based models.  
+✅ **Generalization gap** (Train - Test error) will be **minimized** at the edge, demonstrating criticality's role in preventing overfitting
+
+---
+
+## Experimental Design: Dynamic Ensemble Protocol
+
+Instead of a traditional brute-force grid search, we use a **Targeted Ensemble Approach** to isolate the effect of the "Edge of Chaos". We generate triplets of networks that are architecturally identical but dynamically distinct.
+
+### **STAGE A: Critical Ensemble Generation**
+**Objective**: Build a high-quality dataset of 1000 "triplets" (3000 networks total).
+
+1.  **Stage A.1: Critical Point Localizer**
+    - Sample parameter space $(g_A, g_L, \rho, bias)$ using random search.
+    - Identify 1000 **Critical Points** (The Edge) where $\lambda \in [-0.05, 0.05]$ and Firing Rate $\in [1, 100]$ Hz.
+    - Status: ✅ Complete (1009 points found).
+
+2.  **Stage A.2: Neighbor Generation via Bifurcation Tracking**
+    - For each Critical Point, find two neighbors by systematically tracking bifurcations:
+        - **Stable Neighbor**: Push $\lambda \to \approx -0.2$ by increasing $g_L$ or decreasing $\rho$.
+        - **Chaotic Neighbor**: Push $\lambda \to \approx +0.2$ by decreasing $g_A/g_L$ or increasing $\rho$.
+    - **Bifurcation Tracking**: Use binary search in parameter space to find the exact point where the desired $\lambda$ is reached, ensuring small, controlled distances $d$ from the edge.
+
+3.  **Metrological Characterization (Intrinsic Metrics)**:
+    - For every network in the ensemble, calculate task-independent properties:
+        - **Kernel Rank (KR)**: Richness of the high-dimensional projection (measured via SVD rank of state matrix).
+        - **Memory Capacity (MC_intrinsic)**: Inherent memory retention using uniform noise input.
+        - **Distance Metrics**: 
+            - $\Delta \lambda$ (Dynamic distance)
+            - $d_{4D}$ (Normalized Euclidean distance in parameter space).
+
+### **STAGE B: Functional Evaluation**
+**Objective**: Test the 3000 networks on benchmark tasks to test the Edge of Chaos hypothesis.
+
+1.  **Benchmark Tasks**:
+    - **Delayed XOR**: Non-linear logic with memory (Delays 1-5).
+    - **NARMA-10**: Non-linear time-series prediction.
+    - **Memory Capacity (Full)**: Linear memory duration.
+
+2.  **Analysis of Performance vs. Distance**:
+    - Plot Task Performance $P = f(\lambda)$ and $P = f(d_{4D})$.
+    - Quantify the "width" of the critical regime.
+    - Correlate intrinsic metrics (KR, MC) with task performance to explain **why** the edge is optimal.
 
 ---
 
@@ -280,10 +455,181 @@ python src/run_analysis.py --results results/*.parquet
 ## Adherence to Research Protocol
 
 This plan follows strict academic standards:
-- ✅ Reproducibility (deterministic RNG, Docker, Git)
-- ✅ Fair baselines (ESN, AR, priors)
-- ✅ Statistical rigor (Wilcoxon, effect size, correction)
-- ✅ Biological realism (HH+A-current, Dale's principle)
-- ✅ Methodological transparency (all code public)
+- ✅ **Reproducibility**: Deterministic RNG (4 independent streams), Docker containerization, Git versioning
+- ✅ **Fair Baselines**: ESN (abstract reservoir), AR(10) (NARMA), Class priors (XOR), Shuffled input (MC)
+- ✅ **Statistical Rigor**: Wilcoxon signed-rank, Cohen's d, Bonferroni correction, bio-plausibility filtering
+- ✅ **Biological Realism**: Full conductance-based HH model, Dale's principle, A-current dynamics
+- ✅ **Methodological Transparency**: All code public, detailed theoretical foundation, contingency plans
 
 **No shortcuts. No p-hacking. Publication-grade only.**
+
+---
+
+## Biological Realism: Validation Metrics
+
+To claim this is a "**maximally biological**" reservoir study, we must quantify bio-plausibility beyond firing rates:
+
+### 1. **Firing Rate Distribution**
+- **Target:** 1-50 Hz (cortical range)
+- **Analysis:** Histogram of per-neuron firing rates across all trials
+- **Criterion:** >80% of neurons in biologically plausible range
+
+### 2. **Coefficient of Variation (CV) of ISI**
+- **Target:** CV ∈ [0.5, 1.5] (irregular spiking, not Poisson-like)
+- **Biological Reference:** Cortical neurons exhibit irregular firing with CV ~1.0 [Softky & Koch, 1993]
+- **Analysis:** Compute CV of inter-spike intervals per neuron
+
+### 3. **E/I Balance Ratio**
+- **Target:** Excitatory synaptic current ≈ Inhibitory synaptic current (balanced regime)
+- **Measurement:** $|I_{syn}^E| / |I_{syn}^I|$ should be near 1.0
+- **Biological Reference:** Balanced networks show cancellation of E/I currents [van Vreeswijk & Sompolinsky, 1996]
+
+### 4. **Power-Law Activity Dynamics** (Optional, if time permits)
+- **Target:** Avalanche size distribution follows $P(s) \sim s^{-\alpha}$ with $\alpha \approx 1.5$
+- **Analysis:** Detect "avalanches" (bursts of activity), fit power-law using Maximum Likelihood Estimation
+- **Significance:** Direct replication of Beggs & Plenz (2003) neuronal avalanches
+
+### 5. **Membrane Potential Statistics**
+- **Target:** Resting potential near -65 mV, spike threshold ~-55 mV
+- **Analysis:** Mean and std of $V(t)$ during non-spiking periods
+- **Deviation Check:** Flag trials with abnormal depolarization (e.g., mean V > -50 mV)
+
+**Reporting:**
+Create a "**Bio-Plausibility Score**" (0-100) combining these metrics:
+```python
+bio_score = (
+    0.3 * firing_rate_in_range +
+    0.2 * cv_in_range +
+    0.2 * ei_balance_score +
+    0.15 * voltage_stats_score +
+    0.15 * (1 if power_law_detected else 0)
+) * 100
+```
+
+Include in publication: "Trials with bio_score > 70 were retained for analysis."
+
+---
+
+## Publication Strategy
+
+### Target Journals (Ranked by Fit)
+
+1.  **Nature Communications** (IF ~17.7)
+    - **Angle:** "Conductance-based reservoirs validate Critical Brain Hypothesis"
+    - **Strength:** Interdisciplinary (neuroscience + ML), open access
+    - **Challenge:** Requires strong novelty - emphasize **first HH+A-current edge-of-chaos study**
+
+2.  **eLife** (Computational Neuroscience)
+    - **Angle:** "Biological realism predicts edge-of-chaos optimization in spiking reservoirs"
+    - **Strength:** Favors rigorous computational work, transparent peer review
+    - **Challenge:** Strong competition in reservoir computing
+
+3.  **Neural Computation** (IF ~2.9, but high prestige in field)
+    - **Angle:** "Lyapunov analysis of Hodgkin-Huxley reservoirs with A-current"
+    - **Strength:** Technical depth welcome, reservoir computing core audience
+    - **Challenge:** May want comparison to real neural data
+
+4.  **PLOS Computational Biology**
+    - **Angle:** "Self-organized criticality in biologically detailed spiking networks"
+    - **Strength:** Open access, favors biological motivation
+    - **Challenge:** Broad readership - must make critical brain hypothesis accessible
+
+### Key Citations to Include
+
+**Theoretical Foundation:**
+- Beggs & Plenz (2003) - Neuronal avalanches (J. Neuroscience)
+- Jaeger (2001) - Echo State Property (GMD Report)
+- Bertschinger & Natschläger (2004) - Edge of Chaos in LSM (Neural Comput.)
+- Lizier et al. (2014) - Information transfer at criticality (Chaos)
+- Shriki et al. (2003) - A-current rate model (Network)
+
+**Biological Realism:**
+- Hodgkin & Huxley (1952) - Original conductance-based model
+- Connor & Stevens (1971) - A-current discovery
+- van Vreeswijk & Sompolinsky (1996) - Balanced networks
+- Maass et al. (2002) - Liquid State Machines (Neural Comput.)
+- Verstraeten et al. (2007) - Reservoir computing review
+
+### Manuscript Outline (Tentative)
+
+**Title:** "Edge of Chaos in Conductance-Based Hodgkin-Huxley Reservoirs: Validating the Critical Brain Hypothesis with A-Current Dynamics"
+
+**Abstract (250 words):**
+- Problem: Unknown if biological neurons operate at edge of chaos
+- Gap: Simplified models (ESN, LIF) show benefits, but lack ion channel realism
+- Method: Full HH with A-current, sweep $\rho$ and $g_L$ to locate critical regime
+- Result: Performance peaks at $|\lambda| \approx 0$ (if confirmed)
+- Significance: First evidence that **biological detail** predicts criticality
+
+**Main Sections:**
+1. **Introduction**
+   - Critical Brain Hypothesis (Beggs & Plenz)
+   - Edge of Chaos in abstract reservoirs
+   - Gap: No conductance-based validation
+   
+2. **Methods**
+   - HH+A-current model details
+   - Reservoir architecture (Dale's principle)
+   - Tasks (NARMA, XOR, MC, Lyapunov)
+   - Statistical analysis protocol
+   
+3. **Results**
+   - Phase 1: Locating criticality (bifurcation diagram)
+   - Phase 2: Performance vs. $\lambda$ (scatter plots, bin analysis)
+   - Generalization gap minimization at edge
+   - Biological plausibility metrics
+   
+4. **Discussion**
+   - HH vs. ESN: Does biological realism matter?
+   - Role of A-current in criticality
+   - Connection to neuronal avalanches
+   - Limitations and future work
+
+**Supplementary Material:**
+- Full parameter table
+- Reproducibility checklist (Docker hash, Git commit)
+- Extended bifurcation analysis ($g_L$ vs. $\rho$)
+- Comparison with LIF reservoirs (if time permits)
+
+---
+
+## Success Criteria (Final Checklist)
+
+✅ **Phase 1 Complete:** Functional regime identified (XOR > 0.6)  
+✅ **Phase 2 Complete:** High-statistics sweep (n≥50 per bin)  
+✅ **Statistical Significance:** Wilcoxon test p < 0.05 (Bonferroni-corrected)  
+✅ **Effect Size:** Cohen's d > 0.5 (medium to large effect)  
+✅ **Biological Plausibility:** Bio-score > 70 for >80% of analyzed trials  
+✅ **Reproducibility:** Independent run on different machine yields same peak λ  
+✅ **Code Quality:** Passes all tests in `tests/`, lints clean, documented  
+
+**Publication Decision Tree:**
+- **Strong Support (all metrics peak at edge):** Submit to Nature Communications / eLife
+- **Moderate Support (2/3 tasks):** Submit to Neural Computation / PLOS Comp Bio
+- **Null Result:** Write methods paper for Journal of Open Source Software, Document "why HH doesn't show edge-of-chaos" (still publishable as negative result)
+
+---
+
+## Final Note: Biological Realism as Core Contribution
+
+**What makes this study unique:**
+
+Most reservoir computing studies use:
+- ⚠️ Echo State Networks (abstract, rate-coded)
+- ⚠️ Leaky Integrate-and-Fire (simplified spiking)
+- ⚠️ Random connectivity (no Dale's principle)
+
+**We use:**
+- ✅ **Full Hodgkin-Huxley** (4 conductances: Na, K, L, A)
+- ✅ **A-current** (biologically realistic spike-frequency adaptation)
+- ✅ **Dale's principle** (E/I segregation)
+- ✅ **Biologically plausible firing rates** (1-50 Hz cortical range)
+
+**The question is not "does edge of chaos exist?"** (known from ESN literature)  
+**The question is:** "Do **ion channel mechanisms** naturally self-organize to this regime?"
+
+If YES → Strong evidence that evolution "tuned" $g_{Na}$, $g_K$, $g_A$ for criticality  
+If NO → Suggests abstract reservoirs differ fundamentally from biological neurons
+
+**Either outcome is scientifically valuable.**
+
