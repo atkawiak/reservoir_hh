@@ -1,35 +1,63 @@
-# STAGE D: RIGOROUS EDGE OF CHAOS VERIFICATION
-# Parameters derived from literature (Maass 2002, Bertschinger 2004)
+# Golden Parameters for Hodgkin-Huxley Reservoir Computing
+# Based on Maass & Natschläger (2002) and recent HHLSM literature
 
-tasks:
-  common:
-    dt: 0.05
-    n_train: 1000
-    n_test: 500
-    warmup_symbols: 100
+system:
+  n_neurons: 100
+  ei_ratio: 0.8         # 80% Excitatory, 20% Inhibitory
+  connectivity: 0.1     # 10% sparse connectivity
+  dt: 0.05              # simulation step [ms] 
+  sim_time: 2000        # total simulation time [ms]
+  washout_time: 200     # washout period [ms]
 
-  xor:
-    symbol_ms: 50.0   # Standard temporal window for HH
-    rate_0: 2.0       # Background "alive" rate
-    rate_1: 45.0      # Active signal (below saturation)
-    delays: [1, 2, 3] # Increasing memory challenge
-    
+neuron_hh:
+  C_m: 1.0              # [uF/cm^2]
+  g_Na: 120.0           # [mS/cm^2]
+  g_K: 36.0             # [mS/cm^2]
+  g_L: 0.3              # [mS/cm^2]
+  E_Na: 50.0            # [mV]
+  E_K: -77.0            # [mV]
+  E_L: -54.4            # [mV]
+  V_rest: -65.0         # [mV]
+  # A-type potassium current (optional, improves f-I linearity)
+  g_A: 0.0        # [mS/cm^2] Set to 47.7 to enable (Maass et al. 2002)
+  tau_a: 2.0      # [ms] Fast activation time constant
+  tau_b: 150.0    # [ms] Slow inactivation time constant
+
+synapse:
+  # Conductance-based synapses (Alpha/Exponential)
+  tau_exc: 5.0          # [ms]
+  tau_inh: 10.0         # [ms]
+  E_exc: 0.0            # [mV]
+  E_inh: -80.0          # [mV]
+  # Weight scaling
+  inh_scaling: 3.0      # Edge of Chaos Balance (found via sweep)
+
+input:
+  type: "poisson"
+  rate_signal: 40.0     # [Hz]
+  rate_background: 2.0  # [Hz]
+  gain: 4.0             # Max synaptic conductance (mS/cm^2) for input - Maass standard
+  density: 0.3          # 30% of neurons receive direct input
+  encoding: "rate"
+
+dynamics_control:
+  tau_readout: 50.0     # [ms] Filter constant for readout
+  target_spectral_radius: 0.95  # Baseline Rho for stable operation
+  rho_range: [0.1, 20.0]        # Range for Phase 1 Search
+  perturbation_v: 0.1           # [mV] for Lyapunov calculation
+
+benchmarks:
   mc:
-    symbol_ms: 50.0
-    rate_min: 2.0
-    rate_max: 45.0
-    max_lag: 40
+    max_lag: 60
+    ridge_alpha: 0.000001
+  xor:
+    delays: [1, 2, 3]
+    ridge_alpha: 0.1
+    symbol_duration: 50 # [ms]
+  narma10:
+    order: 10
+    ridge_alpha: 0.01
 
-network:
-  N: 100
-  sparsity: 0.2       # Recurrent connection density
-  in_density: 0.3     # Sparse input (only 30% neurons)
-  in_gain: 3.0        # Perturbation gain (not driving)
-  ei_ratio: 0.8       # 80/20 Dale's Law
-  inh_scale: 4.0      # Strong inhibition for balance
-
-triplets:
-  # To be verified via fine sweep
-  stable:  {rho: 1.0, bias: 5.0} 
-  edge:    {rho: 4.0, bias: 5.0} 
-  chaotic: {rho: 8.0, bias: 5.0}
+validation:
+  n_seeds: 20           # For statistical significance
+  test_split: 0.3       # 30% for testing
