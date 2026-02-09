@@ -1,0 +1,58 @@
+# Rigorous Reservoir Experiment Configuration
+# Based on Multi-Agent Brainstorming Design Review
+
+experiment:
+  name: "Edge of Chaos Verification"
+  version: "1.0"
+
+# Network sizes to test
+sizes: [100]  # TEST MODE: Only N=100
+
+# Number of different random seeds per size
+seeds_per_size: 30
+
+# Which benchmarks to run
+benchmarks:
+  - MC
+  - NARMA10
+
+# Calibration settings
+calibration:
+  # Coarse sweep to find approximate Edge
+  coarse_sweep: [0.1, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 5.0, 10.0]
+  
+  # Use brentq to refine Edge location after coarse sweep
+  fine_search: true
+  fine_search_tolerance: 0.05
+  
+  # Measure Lambda multiple times and take median (reduces noise)
+  lambda_repetitions: 3
+  lambda_steps: 1000  # Steps per measurement
+
+# Validation gates - reject reservoirs that don't meet criteria
+validation:
+  # Edge must have Lambda in this range
+  edge_lambda_range: [-0.2, 0.2]
+  
+  # Stable must have Lambda in this range
+  stable_lambda_range: [-0.5, -0.05]
+  
+  # Minimum MC to consider reservoir "alive"
+  min_mc_alive: 0.01
+
+# Benchmark settings
+benchmark_settings:
+  mc_samples: 1000
+  mc_max_lag: 30
+  narma_length: 1000
+  benchmark_repetitions: 1  # Run each benchmark N times
+
+# Parallelization
+parallelization:
+  max_workers_fraction: 0.9  # Use 90% of CPU cores
+
+# Output
+output:
+  results_file: "EXPERIMENT_RESULTS_N100.csv"
+  summary_file: "EXPERIMENT_SUMMARY_N100.csv"
+  plot_file: "EXPERIMENT_PLOT_N100.png"

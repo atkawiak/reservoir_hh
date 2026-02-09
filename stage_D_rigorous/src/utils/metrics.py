@@ -106,57 +106,60 @@ def calculate_kernel_quality(X_states):
     Measure Kernel Quality (Kernel Rank) using Singular Value Decomposition.
     High rank indicates rich nonlinear representation.
     """
-    if X_states.shape[0] < X_states.shape[1]:
-        # If we have fewer samples than neurons, rank is capped by samples
-        # But we usually have more samples.
-        pass
+    if X_states.size == 0:
+        return 0.0
     
     # SVD to find effective rank (number of singular values above threshold)
     try:
+        # We use a tolerant rank calculation
         _, s, _ = np.linalg.svd(X_states, full_matrices=False)
-        # Numerical rank: sum of singular values that are significant
-        # or just count values > threshold
+        # Numerical rank: count values above a threshold
         threshold = s.max() * max(X_states.shape) * np.finfo(s.dtype).eps
-        rank = np.sum(s > threshold)
-        return rank / X_states.shape[1] # Normalized rank (percentage of neurons utilized)
+        rank = np.sum(s > (threshold * 10)) # More robust threshold
+        return rank / X_states.shape[1] # Normalized rank (0.0 to 1.0)
     except:
         return 0.0
 
-def calculate_separation_property(res_instance, input_rate_1=20.0, input_rate_2=25.0, n_steps=1000):
+def calculate_separation_property(states1, states2):
     """
-    Measure Separation Property: Distance between reservoir states for different input frequencies.
-    Optimal separation is expected at the Edge of Chaos.
+    Measure Separation: Distance between two state matrices.
     """
-    dt = res_instance.dt
-    p1 = input_rate_1 * dt / 1000.0
-    p2 = input_rate_2 * dt / 1000.0
-    n_in = len(res_instance.input_indices)
+    if states1.size == 0 or states2.size == 0: return 0.0
+    dist = np.linalg.norm(np.mean(states1, axis=0) - np.mean(states2, axis=0))
+    return dist / np.sqrt(states1.shape[1])
+
+def lempel_ziv_complexity(binary_sequence):
+    """
+    Calculates Lempel-Ziv Complexity for a binary sequence (spike train).
+    Efficient O(n) version using substrings.
+    """
+    s = binary_sequence.astype(int).tolist()
+    n = len(s)
+    if n == 0: return 0.0
     
-    # Run two identical reservoirs with different inputs
-    # We save the original state
-    orig_V = res_instance.neuron_group.V.copy()
+    words = set()
+    words.add(tuple([s[0]]))
     
-    states1 = []
-    rng = np.random.default_rng(42)
-    for _ in range(n_steps):
-        u = (rng.random(n_in) < p1).astype(float)
-        res_instance.step(u)
-        states1.append(res_instance.neuron_group.V.copy())
+    c = 1
+    curr_word = []
     
-    # Reset
-    res_instance.neuron_group.V = orig_V.copy()
-    # Reset other gates if necessary... for simplicity let's assume V is enough meta-proxy
-    
-    states2 = []
-    rng = np.random.default_rng(42) # Same seed for internal noise if any
-    for _ in range(n_steps):
-        u = (rng.random(n_in) < p2).astype(float)
-        res_instance.step(u)
-        states2.append(res_instance.neuron_group.V.copy())
-        
-    states1 = np.array(states1)
-    states2 = np.array(states2)
-    
-    # Calculate average distance between corresponding states
-    dist = np.mean(np.linalg.norm(states1 - states2, axis=1))
-    return dist
+    for i in range(1, n):
+        curr_word.append(s[i])
+        if tuple(curr_word) not in words:
+            words.add(tuple(curr_word))
+            curr_word = []
+            c += 1
+            
+    # Normalized complexity: c / (n / log2(n))
+    return (c * np.log2(n)) / n if n > 0 else 0.0
+
+def calculate_lz_complexity_population(spike_matrix):
+    """
+    Calculate average Lempel-Ziv complexity across a population of neurons.
+    spike_matrix: [time_steps, n_neurons]
+    """
+    complexities = []
+    for i in range(spike_matrix.shape[1]):
+        c = lempel_ziv_complexity(spike_matrix[:, i])
+        complexities.append(c)
+    return np.mean(complexities)
