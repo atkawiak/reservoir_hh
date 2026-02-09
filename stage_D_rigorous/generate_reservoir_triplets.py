@@ -227,7 +227,6 @@ def run_rigorous_study(n_neurons=100, n_seeds=30):
     
     print(f"Starting Rigorous E/I Balance Study: N={n_neurons}, {n_seeds} seeds.")
     
-    # Utilize parallel processing for efficiency
     with ProcessPoolExecutor(max_workers=4) as executor:
         future_to_seed = {executor.submit(process_triplet_for_seed, n_neurons, s, config): s for s in seeds}
         
