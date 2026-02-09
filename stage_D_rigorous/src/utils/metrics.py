@@ -1,165 +1,215 @@
 import numpy as np
-import yaml
-import os
 from sklearn.linear_model import Ridge
+
+# ============================================================================
+# DYNAMICAL SYSTEM METRICS
+# ============================================================================
 
 def calculate_lyapunov(reservoir, n_steps=3000, perturbation=1e-4, renorm_interval=10, seed=42):
     """
-    Calculate pseudo-Lyapunov exponent using Benettin method.
-    Fixed: Added support for A-type gates and better state synchronization.
+    Calculate pseudo-Lyapunov exponent using the Benettin method.
+    Estimates the sensitive dependence on initial conditions.
     """
-    from src.model.reservoir import Reservoir
-    n_neurons = reservoir.n_neurons
+    # Create and synchronize a twin reservoir
+    twin_reservoir = _create_synchronized_twin(reservoir)
+    
+    # Apply initial perturbation to the twin
+    twin_reservoir.neuron_group.V += perturbation
+    
+    log_divergences = _evolve_and_measure_divergence(
+        reservoir, twin_reservoir, n_steps, perturbation, renorm_interval, seed
+    )
+    
     dt = reservoir.dt
+    if not log_divergences:
+        return 0.0
+        
+    return np.mean(log_divergences) / (renorm_interval * dt)
+
+def _create_synchronized_twin(original_reservoir):
+    """Creates a twin reservoir with identical weights and state."""
+    from src.model.reservoir import Reservoir
     
-    # Create perturbed copy (Twin)
-    # We pass a minimal config just to initialize the neuron group properly if g_A is handled
-    config = {'neuron_hh': {'g_A': reservoir.neuron_group.g_A}}
-    res_twin = Reservoir(n_neurons=n_neurons, config={'input': {'density': 0.1}, 'system': {'dt': dt}, 'neuron_hh': config['neuron_hh']})
+    # Initialize twin with same configuration
+    config = {'neuron_hh': {'g_A': original_reservoir.neuron_group.g_A}}
+    twin = Reservoir(
+        n_neurons=original_reservoir.n_neurons, 
+        config={'input': {'density': 0.1}, 'system': {'dt': original_reservoir.dt}, 'neuron_hh': config['neuron_hh']}
+    )
     
-    # Force identical weights
-    res_twin.W = reservoir.W.copy()
-    res_twin.W_exc = reservoir.W_exc.copy()
-    res_twin.W_inh = reservoir.W_inh.copy()
-    res_twin.W_in = reservoir.W_in.copy()
-    res_twin.input_indices = reservoir.input_indices.copy()
+    # Snapshot weights
+    twin.weight_matrix = original_reservoir.weight_matrix.copy()
+    twin.weights_exc = original_reservoir.weights_exc.copy()
+    twin.weights_inh = original_reservoir.weights_inh.copy()
+    twin.input_weights = original_reservoir.input_weights.copy()
+    twin.input_indices = original_reservoir.input_indices.copy()
     
-    # Synchronize ALL state variables
-    res_twin.neuron_group.V = reservoir.neuron_group.V.copy()
-    res_twin.neuron_group.m = reservoir.neuron_group.m.copy()
-    res_twin.neuron_group.h = reservoir.neuron_group.h.copy()
-    res_twin.neuron_group.n = reservoir.neuron_group.n.copy()
-    if reservoir.neuron_group.g_A > 0:
-        res_twin.neuron_group.a = reservoir.neuron_group.a.copy()
-        res_twin.neuron_group.b = reservoir.neuron_group.b.copy()
+    # Sync all dynamical gates (A-type supported)
+    _sync_neuron_states(original_reservoir.neuron_group, twin.neuron_group)
     
-    # Perturb twin
-    res_twin.neuron_group.V += perturbation
-    
-    log_divergences = []
-    input_rate = 20.0 # Hz
-    p_spike = input_rate * dt / 1000.0
-    n_input = len(reservoir.input_indices)
-    
+    return twin
+
+def _sync_neuron_states(source, target):
+    """Copies all HH gating variables from source to target group."""
+    target.V = source.V.copy()
+    target.m = source.m.copy()
+    target.h = source.h.copy()
+    target.n = source.n.copy()
+    if hasattr(source, 'a'):
+        target.a = source.a.copy()
+        target.b = source.b.copy()
+
+def _evolve_and_measure_divergence(res, twin, steps, eps, interval, seed):
+    """Main loop for Benettin's algorithm: evolve both systems and renormalize."""
+    log_divs = []
+    dt = res.dt
+    p_spike = 20.0 * dt / 1000.0 # 20Hz base input
+    n_in = len(res.input_indices)
     rng = np.random.default_rng(seed)
     
-    for step in range(n_steps):
-        spikes_in = (rng.random(n_input) < p_spike).astype(float)
-        reservoir.step(spikes_in)
-        res_twin.step(spikes_in)
+    for step in range(steps):
+        spikes_in = (rng.random(n_in) < p_spike).astype(float)
+        res.step(spikes_in)
+        twin.step(spikes_in)
         
-        if (step + 1) % renorm_interval == 0:
-            # Distance in full phase space
-            diffs = [
-                res_twin.neuron_group.V - reservoir.neuron_group.V,
-                res_twin.neuron_group.m - reservoir.neuron_group.m,
-                res_twin.neuron_group.h - reservoir.neuron_group.h,
-                res_twin.neuron_group.n - reservoir.neuron_group.n
-            ]
-            if reservoir.neuron_group.g_A > 0:
-                diffs.append(res_twin.neuron_group.a - reservoir.neuron_group.a)
-                diffs.append(res_twin.neuron_group.b - reservoir.neuron_group.b)
-            
-            delta = np.concatenate(diffs)
-            divergence = np.linalg.norm(delta)
+        if (step + 1) % interval == 0:
+            divergence = _calculate_phase_space_distance(res.neuron_group, twin.neuron_group)
             
             if divergence > 1e-15:
-                log_divergences.append(np.log(divergence / perturbation))
-                scale = perturbation / divergence
-                res_twin.neuron_group.V = reservoir.neuron_group.V + diffs[0] * scale
-                res_twin.neuron_group.m = reservoir.neuron_group.m + diffs[1] * scale
-                res_twin.neuron_group.h = reservoir.neuron_group.h + diffs[2] * scale
-                res_twin.neuron_group.n = reservoir.neuron_group.n + diffs[3] * scale
-                if reservoir.neuron_group.g_A > 0:
-                    res_twin.neuron_group.a = reservoir.neuron_group.a + diffs[4] * scale
-                    res_twin.neuron_group.b = reservoir.neuron_group.b + diffs[5] * scale
+                log_divs.append(np.log(divergence / eps))
+                _renormalize_twin_state(res.neuron_group, twin.neuron_group, divergence, eps)
             else:
-                log_divergences.append(-20.0)
+                log_divs.append(-20.0) # Massive convergence fallback
                 
-    if len(log_divergences) > 0:
-        return np.mean(log_divergences) / (renorm_interval * dt)
-    return 0.0
+    return log_divs
+
+def _calculate_phase_space_distance(ng1, ng2):
+    """Computes Euclidean distance between two neuron groups in full phase space."""
+    diffs = [ng2.V - ng1.V, ng2.m - ng1.m, ng2.h - ng1.h, ng2.n - ng1.n]
+    if hasattr(ng1, 'a'):
+        diffs.extend([ng2.a - ng1.a, ng2.b - ng1.b])
+    
+    return np.linalg.norm(np.concatenate(diffs))
+
+def _renormalize_twin_state(source, target, current_dist, target_dist):
+    """Rescales the difference between systems to keep them within linear regime."""
+    scale = target_dist / current_dist
+    
+    target.V = source.V + (target.V - source.V) * scale
+    target.m = source.m + (target.m - source.m) * scale
+    target.h = source.h + (target.h - source.h) * scale
+    target.n = source.n + (target.n - source.n) * scale
+    if hasattr(source, 'a'):
+        target.a = source.a + (target.a - source.a) * scale
+        target.b = source.b + (target.b - source.b) * scale
+
+# ============================================================================
+# PERFORMANCE BENCHMARK TOOLS
+# ============================================================================
 
 def get_nrmse(y_true, y_pred):
+    """Normalized Root Mean Square Error."""
     rmse = np.sqrt(np.mean((y_true - y_pred)**2))
-    r = np.max(y_true) - np.min(y_true)
-    return rmse / r if r > 0 else rmse
+    target_range = np.max(y_true) - np.min(y_true)
+    return rmse / target_range if target_range > 0 else rmse
 
-def get_mc(y_true, X_states, ridge_alpha=0.000001):
-    total_mc = 0
-    n_samples = len(y_true)
-    split = int(n_samples * 0.7)
-    for k in range(1, 41):
-        if k >= n_samples: break
-        y_delayed = np.concatenate([np.zeros(k), y_true[:-k]])
-        X_train, X_test = X_states[:split], X_states[split:]
-        y_train, y_test = y_delayed[:split], y_delayed[split:]
+def get_mc(y_values, states, ridge_alpha=1e-6):
+    """
+    Memory Capacity (MC) measurement.
+    Iteratively predicts past inputs using reservoir states.
+    """
+    total_capacity = 0
+    n_samples = len(y_values)
+    split_idx = int(n_samples * 0.7)
+    
+    # Max lag capped at 40 or partial samples
+    max_lag = min(40, n_samples - 1)
+    
+    for delay in range(1, max_lag + 1):
+        y_delayed = np.concatenate([np.zeros(delay), y_values[:-delay]])
+        
+        X_train, X_test = states[:split_idx], states[split_idx:]
+        y_train, y_test = y_delayed[:split_idx], y_delayed[split_idx:]
+        
         model = Ridge(alpha=ridge_alpha)
         model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-        corr = np.corrcoef(y_test, y_pred)[0, 1]
-        total_mc += corr**2 if not np.isnan(corr) and corr > 0 else 0
-    return total_mc
+        prediction = model.predict(X_test)
+        
+        correlation = np.corrcoef(y_test, prediction)[0, 1]
+        
+        if not np.isnan(correlation) and correlation > 0:
+            total_capacity += correlation**2
+            
+    return total_capacity
 
-def calculate_kernel_quality(X_states):
+# ============================================================================
+# STRUCTURAL PROPERTIES
+# ============================================================================
+
+def calculate_kernel_quality(states):
     """
-    Measure Kernel Quality (Kernel Rank) using Singular Value Decomposition.
-    High rank indicates rich nonlinear representation.
+    Measure Kernel Quality (Rank of the state matrix).
+    Evaluates the dimensionality of the reservoir's neural representation.
     """
-    if X_states.size == 0:
+    if states.size == 0:
         return 0.0
     
-    # SVD to find effective rank (number of singular values above threshold)
     try:
-        # We use a tolerant rank calculation
-        _, s, _ = np.linalg.svd(X_states, full_matrices=False)
-        # Numerical rank: count values above a threshold
-        threshold = s.max() * max(X_states.shape) * np.finfo(s.dtype).eps
-        rank = np.sum(s > (threshold * 10)) # More robust threshold
-        return rank / X_states.shape[1] # Normalized rank (0.0 to 1.0)
-    except:
+        _, singular_values, _ = np.linalg.svd(states, full_matrices=False)
+        # Numerical rank calculation: count singular values above threshold
+        machine_eps = np.finfo(singular_values.dtype).eps
+        threshold = singular_values.max() * max(states.shape) * machine_eps
+        
+        # Using a slightly higher threshold (10x) for robustness to numeric noise
+        rank = np.sum(singular_values > (threshold * 10))
+        return rank / states.shape[1]
+    except (np.linalg.LinAlgError, ValueError):
         return 0.0
 
-def calculate_separation_property(states1, states2):
-    """
-    Measure Separation: Distance between two state matrices.
-    """
-    if states1.size == 0 or states2.size == 0: return 0.0
-    dist = np.linalg.norm(np.mean(states1, axis=0) - np.mean(states2, axis=0))
-    return dist / np.sqrt(states1.shape[1])
+def calculate_separation_property(states_set_1, states_set_2):
+    """Distance between reservoir state means for two distinct input signals."""
+    if states_set_1.size == 0 or states_set_2.size == 0:
+        return 0.0
+        
+    mean_state_1 = np.mean(states_set_1, axis=0)
+    mean_state_2 = np.mean(states_set_2, axis=0)
+    
+    dist = np.linalg.norm(mean_state_1 - mean_state_2)
+    return dist / np.sqrt(states_set_1.shape[1]) # Scale by dimension
 
 def lempel_ziv_complexity(binary_sequence):
     """
-    Calculates Lempel-Ziv Complexity for a binary sequence (spike train).
-    Efficient O(n) version using substrings.
+    Computes Lempel-Ziv Complexity for a categorical sequence (e.g., spike train).
+    Measures the amount of non-redundant information in neural activity.
     """
-    s = binary_sequence.astype(int).tolist()
-    n = len(s)
-    if n == 0: return 0.0
+    sequence_data = binary_sequence.astype(int).tolist()
+    n_length = len(sequence_data)
+    if n_length == 0:
+        return 0.0
     
-    words = set()
-    words.add(tuple([s[0]]))
+    unique_words = set()
+    unique_words.add(tuple([sequence_data[0]]))
     
-    c = 1
-    curr_word = []
+    word_count = 1
+    current_word = []
     
-    for i in range(1, n):
-        curr_word.append(s[i])
-        if tuple(curr_word) not in words:
-            words.add(tuple(curr_word))
-            curr_word = []
-            c += 1
+    for i in range(1, n_length):
+        current_word.append(sequence_data[i])
+        if tuple(current_word) not in unique_words:
+            unique_words.add(tuple(current_word))
+            current_word = []
+            word_count += 1
             
-    # Normalized complexity: c / (n / log2(n))
-    return (c * np.log2(n)) / n if n > 0 else 0.0
+    # Normalized complexity: word_count / (n / log2(n))
+    return (word_count * np.log2(n_length)) / n_length if n_length > 0 else 0.0
 
 def calculate_lz_complexity_population(spike_matrix):
-    """
-    Calculate average Lempel-Ziv complexity across a population of neurons.
-    spike_matrix: [time_steps, n_neurons]
-    """
-    complexities = []
-    for i in range(spike_matrix.shape[1]):
-        c = lempel_ziv_complexity(spike_matrix[:, i])
-        complexities.append(c)
-    return np.mean(complexities)
+    """Average Lempel-Ziv complexity across all neurons in the population."""
+    if spike_matrix.size == 0:
+        return 0.0
+    
+    neuron_complexities = [
+        lempel_ziv_complexity(spike_matrix[:, i]) 
+        for i in range(spike_matrix.shape[1])
+    ]
+    return np.mean(neuron_complexities)
