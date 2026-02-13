@@ -1,0 +1,57 @@
+
+# ============================================================
+# DELAYED XOR - STANDARD SPEC 
+# Standard Logic Task for SNNs
+# ============================================================
+
+neuron:
+  model: "hh"
+  C_m: 1.0
+  g_Na: 120.0
+  g_K: 36.0
+  g_L: 0.3
+  E_Na: 50.0
+  E_K: -77.0
+  E_L: -54.4
+  V_rest: -65.0
+
+network:
+  N: 100
+  connection_prob: 0.2
+  ei_ratio: 0.8
+  spectral_radius: 0.95
+  w_exc_mean: 1.2
+  w_inh_mean: 6.0
+  
+synapse:
+  model: "current"
+  tau_exc: 5.0
+  tau_inh: 10.0
+
+input:
+  protocol: "poisson"
+  # Maass often uses input channels rather than single spikes
+  n_fibers_per_input: 4 
+  symbol_duration: 40.0 # Common for 'spike jitter' robustness
+  input_gain: 40.0      # Drive the network hard enough
+  base_rate: 5.0
+  input_weight: 12.0
+  input_density: 0.3
+
+integration:
+  method: "rk4"
+  dt: 0.01
+
+simulation:
+  washout: 1000.0
+  downsample_rates: 10
+
+benchmarks:
+  delayed_xor:
+    sequence_length: 1000
+    delay: 1 # Standard 1-symbol delay logic
+
+readout:
+  train_fraction: 0.7
+  val_fraction: 0.15
+  test_fraction: 0.15

@@ -1,0 +1,34 @@
+
+# ============================================================
+# BASELINE N=100 - SCIENTIFIC VALIDATION (MC)
+# ============================================================
+network:
+  N: 100
+  spectral_radius: 0.95
+  ei_ratio: 0.8
+  w_inh_mean: 4.0
+  connection_prob: 0.1
+
+neuron:
+  model: "hh"
+  V_rest: -65.0
+
+input:
+  protocol: "poisson"
+  n_fibers_per_input: 4
+  symbol_duration: 30.0
+  input_gain: 40.0
+  base_rate: 5.0
+  input_weight: 10.0
+
+simulation:
+  washout: 1000.0
+  sequence_length: 1000
+
+integration:
+  dt: 0.01
+
+readout:
+  train_fraction: 0.7
+  val_fraction: 0.15
+  test_fraction: 0.15
