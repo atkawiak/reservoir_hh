@@ -1,1 +1,0 @@
-# HH Reservoir Computing Framework

@@ -1,0 +1,40 @@
+{
+  "warmup_ms": 1000.0,
+  "measure_ms": 2000.0,
+  "dt_ms": 0.025,
+  "results": [
+    {
+      "regime_name": "R1_deep_stable",
+      "regime_index": 0,
+      "alpha": 0.013539773291458421,
+      "rate_E": 18.725,
+      "rate_I": 20.45,
+      "cv_isi_E": 0.4132446203079978,
+      "cv_isi_I": 0.39971327920534877,
+      "fano_E": 0.42236943164362517,
+      "fano_I": 0.3371794871794872,
+      "sync_E": 0.9674500733574332,
+      "sync_I": 1.0243232157506146,
+      "pct_silent_E": 0.0,
+      "pct_silent_I": 0.0,
+      "spike_count_E": 2996,
+      "spike_count_I": 818,
+      "has_nan": false,
+      "status": "OK"
+    }
+  ],
+  "separation": {
+    "pass": true,
+    "details": []
+  },
+  "quality_5regime": {
+    "overall": "PASS",
+    "per_regime": {
+      "0": {
+        "name": "R1_deep_stable",
+        "verdict": "PASS",
+        "reason": ""
+      }
+    }
+  }
+}

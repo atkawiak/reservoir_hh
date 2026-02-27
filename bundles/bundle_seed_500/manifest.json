@@ -1,0 +1,13 @@
+{
+  "created": "2026-02-27T07:26:53",
+  "files": {
+    "config.json": "0ca65c90fd7d326f1817a91b4f415490d2b59cc6d9f2d2713b065533a4051202",
+    "network/base_stats.json": "af24e890ec407da1a65123cf6a086283d05aba94a12c4c3fb65112adb34159ee",
+    "network/population.json": "18e4aa91aa69da08154749ab131824236221caf3f9e000ca05dcbb4648f16eb0",
+    "regimes/regimes.json": "df511b78eac7551f805ba06551d71c6baf210770449f2f3d9ae815261ba815a5",
+    "network/edges.npz": "9661d60f92cfd8beb5753a566df5eb713e37d4531890334b54f1df8504407e6e",
+    "network/neuron_params.npz": "f0e113d802e93ab812d7f44d382934688dc2f7af3dbe57d54171ab3d35c96ade",
+    "network/synapse_params.npz": "8f5e2500592a38e127a9dde4791d1361ef630ffe9cf91e704ba560540198418a",
+    "poisson/trains_3s.npz": "d6a2535d37ca93b09229c7bd8152b9a9b6e610e2c0ac4687c6a4d39ec5095138"
+  }
+}

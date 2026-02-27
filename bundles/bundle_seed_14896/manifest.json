@@ -1,0 +1,14 @@
+{
+  "created": "2026-02-26T10:16:35",
+  "files": {
+    "config.json": "27f060bca0784b23657e722aa9351dbf153b4b44d2346262a3d615fd9f25938c",
+    "network/base_stats.json": "181d9187db1d3fb85bd85cb57aaf08a972c3d8a57c5abf5879a416662417d5de",
+    "network/population.json": "29869a7f9e3bf2cf6b1ecf16b507ef4b1d85acc21dbb19161b8c433cb2b86341",
+    "regimes/regimes.json": "5b65d7848e93daa1c7276e1b077bc6a5d5618e4b9d92eadc7fd3b76a149cf78e",
+    "validation/metrics.json": "7f2261ab4d2ab412283377879d38e65bd6f50c280a714d176209d12b264ad82c",
+    "network/edges.npz": "1e24ce834e9042c0824c3da473afb0fdeb9d9180024a71191ccf615d012803ec",
+    "network/neuron_params.npz": "ac3dbf2c9fe5ddcb516a5ab9f5ea57167469865c8435e483da1791497c708d89",
+    "network/synapse_params.npz": "631de1ef74edfd6ee618da72101318a094ff63fec5a3e6062a4cfecf9adb0b8d",
+    "poisson/trains_3s.npz": "be9f07e95a77c68fd76e4aae87b6b92e023701c96c8c1ee4bf366b9dbe6ebc31"
+  }
+}

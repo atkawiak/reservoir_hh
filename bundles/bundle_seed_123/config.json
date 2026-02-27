@@ -1,0 +1,113 @@
+{
+  "seed": 123,
+  "bundle_version": "2.0",
+  "N": 100,
+  "frac_I": 0.2,
+  "graph_type": "ER",
+  "p_conn": 0.2,
+  "k_in": 20,
+  "allow_self": false,
+  "w_EE_base": 3.0,
+  "w_EI_base": 6.0,
+  "w_IE_base": 11.2,
+  "w_II_base": 11.2,
+  "w_sigma": 0.3,
+  "neuron_hetero": {
+    "Cm": {
+      "base": 1.0,
+      "sigma": 0.05,
+      "clamp_lo": 0.8,
+      "clamp_hi": 1.2
+    },
+    "gL": {
+      "base": 5e-05,
+      "sigma": 0.05,
+      "clamp_lo": 0.8,
+      "clamp_hi": 1.2
+    },
+    "gNa": {
+      "base": 100.0,
+      "sigma": 0.05,
+      "clamp_lo": 0.8,
+      "clamp_hi": 1.2
+    },
+    "gK": {
+      "base": 30.0,
+      "sigma": 0.05,
+      "clamp_lo": 0.8,
+      "clamp_hi": 1.2
+    },
+    "Vt": {
+      "base": -63.0,
+      "sigma": 0.03,
+      "clamp_lo": 0.9,
+      "clamp_hi": 1.1
+    },
+    "Ib": {
+      "base": 0.05,
+      "sigma": 0.1,
+      "clamp_lo": 0.5,
+      "clamp_hi": 1.5
+    }
+  },
+  "stp_params": {
+    "EE": {
+      "U": 0.5,
+      "tau_d_ms": 1100.0,
+      "tau_f_ms": 50.0,
+      "sigma": 0.3
+    },
+    "EI": {
+      "U": 0.05,
+      "tau_d_ms": 125.0,
+      "tau_f_ms": 1200.0,
+      "sigma": 0.3
+    },
+    "IE": {
+      "U": 0.25,
+      "tau_d_ms": 700.0,
+      "tau_f_ms": 20.0,
+      "sigma": 0.3
+    },
+    "II": {
+      "U": 0.32,
+      "tau_d_ms": 144.0,
+      "tau_f_ms": 60.0,
+      "sigma": 0.3
+    }
+  },
+  "target_balance": 1.0,
+  "balance_tol": 0.1,
+  "delay_min_ms": 0.5,
+  "delay_max_ms": 2.0,
+  "poisson_T_s": 3.0,
+  "poisson_dt_ms": 0.025,
+  "poisson_rate_hz": 10.0,
+  "poisson_n_channels": -1,
+  "rho_eff_targets": [
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.6
+  ],
+  "edge_multipliers": [
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.6
+  ],
+  "edge_cv_thr": 0.45,
+  "edge_fano_thr": 0.5,
+  "edge_n_scan": 16,
+  "bundle_dir": "bundles",
+  "seeds": {
+    "graph": 6293585094778680550,
+    "weights": 496411279815456401,
+    "neurons": 2032461088575780171,
+    "synapses": 1700529803182392834,
+    "poisson": 1622445569185411179,
+    "regimes": 7490249763972238116
+  }
+}

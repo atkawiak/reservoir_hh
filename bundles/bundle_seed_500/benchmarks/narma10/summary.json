@@ -1,0 +1,62 @@
+{
+  "0": {
+    "regime_name": "R1_deep_stable",
+    "alpha_syn": 0.002845429912149415,
+    "n_seeds": 1,
+    "n_ok": 1,
+    "nrmse_mean": 0.8587755817137682,
+    "nrmse_std": 0.0,
+    "nrmse_min": 0.8587755817137682,
+    "nrmse_max": 0.8587755817137682,
+    "r2_mean": 0.2625045002521791,
+    "r2_std": 0.0
+  },
+  "1": {
+    "regime_name": "R2_stable",
+    "alpha_syn": 0.004979502346261476,
+    "n_seeds": 1,
+    "n_ok": 1,
+    "nrmse_mean": 0.8499776169221762,
+    "nrmse_std": 0.0,
+    "nrmse_min": 0.8499776169221762,
+    "nrmse_max": 0.8499776169221762,
+    "r2_mean": 0.2775380507312982,
+    "r2_std": 0.0
+  },
+  "2": {
+    "regime_name": "R3_edge",
+    "alpha_syn": 0.007113574780373538,
+    "n_seeds": 1,
+    "n_ok": 1,
+    "nrmse_mean": 0.8432241720524007,
+    "nrmse_std": 0.0,
+    "nrmse_min": 0.8432241720524007,
+    "nrmse_max": 0.8432241720524007,
+    "r2_mean": 0.2889729956665432,
+    "r2_std": 0.0
+  },
+  "3": {
+    "regime_name": "R4_weak_chaos",
+    "alpha_syn": 0.009959004692522953,
+    "n_seeds": 1,
+    "n_ok": 1,
+    "nrmse_mean": 0.8418073605155514,
+    "nrmse_std": 0.0,
+    "nrmse_min": 0.8418073605155514,
+    "nrmse_max": 0.8418073605155514,
+    "r2_mean": 0.2913603677818406,
+    "r2_std": 0.0
+  },
+  "4": {
+    "regime_name": "R5_strong_chaos",
+    "alpha_syn": 0.014227149560747075,
+    "n_seeds": 1,
+    "n_ok": 1,
+    "nrmse_mean": 0.8443834706050429,
+    "nrmse_std": 0.0,
+    "nrmse_min": 0.8443834706050429,
+    "nrmse_max": 0.8443834706050429,
+    "r2_mean": 0.28701655456898256,
+    "r2_std": 0.0
+  }
+}

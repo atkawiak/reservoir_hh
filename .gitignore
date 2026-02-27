@@ -1,9 +1,52 @@
-venv/
-.venv/
+# Python
 __pycache__/
 *.pyc
-results/
-*.txt
-*.npz
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Brian2 generated
+output/
+brian_objects/
+*.so
+brian_debug_*.log
+
+# Calibration outputs (regenerable)
+regimes/
+regimes_calibrated/
+
+# Concatenated pipeline (regenerable via _concat.ps1)
+pipeline_code.txt
+pipeline_files.txt
+pipeline_all.txt
+
+# Diagnostics / logs
+diagnostics_lambda.txt
 *.log
+
+# OS
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Brian2 reference docs (large, external)
+docs/
+
+# Test cache
+.pytest_cache/
+.coverage
+htmlcov/
