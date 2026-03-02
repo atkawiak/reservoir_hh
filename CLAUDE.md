@@ -131,8 +131,8 @@ pytest gen/tests/test_all.py -v
 | K_train     | 500    | training bins                     |
 | K_test      | 100    | test bins                         |
 | dt_task_ms  | 20     | bin width (from Krok 0)           |
-| bg_scale    | TBD    | from Krok 1                       |
-| narma_scale | TBD    | from Krok 2                       |
+| bg_scale    | 0.25   | from Krok 1                       |
+| narma_scale | 4.0 nA | from Krok 2 (Opcja C: plateau)    |
 
 ## Previous N=100 results (bundle_seed_100)
 
