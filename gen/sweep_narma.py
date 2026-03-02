@@ -299,11 +299,39 @@ def _evaluate_readout(
     )
     y_pred = ridge_predict(model, X_test)
 
+    # TDL baseline: ridge on [u(t-1),..,u(t-D)], same split/normalization
+    # Computed once per (narma_seed, D) — deterministic, no Brian2 needed
+    u_raw = cached["u"]
+    K_u = len(u_raw)
+    X_tdl = np.zeros((K_u, D if D > 0 else 1), dtype=np.float64)
+    if D > 0:
+        for d in range(1, D + 1):
+            X_tdl[d:, d - 1] = u_raw[:K_u - d]
+        y_tdl = cached["y"][D:].copy()
+        X_tdl = X_tdl[D:]
+    else:
+        X_tdl[:, 0] = u_raw
+        y_tdl = cached["y"].copy()
+    mu_t = X_tdl.mean(axis=0, keepdims=True)
+    sig_t = X_tdl.std(axis=0, keepdims=True)
+    sig_t[sig_t < 1e-12] = 1.0
+    X_tdl = (X_tdl - mu_t) / sig_t
+    Xt_tr = X_tdl[i_start:i_split]
+    Xt_te = X_tdl[i_split:i_end]
+    yt_tr = y_tdl[i_start:i_split]
+    yt_te = y_tdl[i_split:i_end]
+    tdl_model, _ = ridge_cv_fit(Xt_tr, yt_tr, n_folds=ridge_cv_folds, seed=ridge_seed)
+    y_pred_tdl = ridge_predict(tdl_model, Xt_te)
+    nrmse_tdl_u = nrmse(yt_te, y_pred_tdl)
+    r2_tdl_u = r_squared(yt_te, y_pred_tdl)
+
     return {
         "nrmse": nrmse(y_test, y_pred),
         "rmse": rmse(y_test, y_pred),
         "r2": r_squared(y_test, y_pred),
         "alpha_ridge": alpha_ridge,
+        "nrmse_tdl_u": nrmse_tdl_u,
+        "r2_tdl_u": r2_tdl_u,
         "total_spikes": total_spikes,
         "active_neurons": active_neurons,
         "mean_spikes_per_bin": mean_spikes_per_bin,

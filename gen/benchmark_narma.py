@@ -56,6 +56,60 @@ class NarmaConfig:
     ridge_seed: int = 0
 
 
+def _tdl_baseline(
+    u: np.ndarray,
+    y: np.ndarray,
+    D: int,
+    K_warmup: int,
+    K_train: int,
+    K_test: int,
+    ridge_cv_folds: int = 5,
+    ridge_seed: int = 0,
+) -> dict:
+    """Tapped Delay Line baseline: ridge on [u(t-1),..,u(t-D)].
+
+    Uses exactly the same train/test split and standardization as the RC pipeline.
+    Computed once per (narma_seed, n_delays, splits) — independent of brian seed.
+
+    Returns dict with nrmse_tdl_u, r2_tdl_u.
+    """
+    # Build TDL feature matrix from input u only
+    K = len(u)
+    X_tdl = np.zeros((K, D), dtype=np.float64)
+    for d in range(1, D + 1):
+        X_tdl[d:, d - 1] = u[:K - d]
+
+    # Same split as RC (after delay embedding the target also shifts by D)
+    y_shifted = y[D:]
+    X_shifted = X_tdl[D:]
+
+    i_start = K_warmup
+    i_split = i_start + K_train
+    i_end   = i_split + K_test
+    K_eff   = len(y_shifted)
+    i_end   = min(i_end, K_eff)
+
+    X_tr = X_shifted[i_start:i_split]
+    X_te = X_shifted[i_split:i_end]
+    y_tr = y_shifted[i_start:i_split]
+    y_te = y_shifted[i_split:i_end]
+
+    # Standardize on train only
+    mu = X_tr.mean(axis=0, keepdims=True)
+    sigma = X_tr.std(axis=0, keepdims=True)
+    sigma[sigma < 1e-12] = 1.0
+    X_tr = (X_tr - mu) / sigma
+    X_te = (X_te - mu) / sigma
+
+    model, _ = ridge_cv_fit(X_tr, y_tr, n_folds=ridge_cv_folds, seed=ridge_seed)
+    y_pred = ridge_predict(model, X_te)
+
+    return {
+        "nrmse_tdl_u": nrmse(y_te, y_pred),
+        "r2_tdl_u":    r_squared(y_te, y_pred),
+    }
+
+
 def run_narma_benchmark(
     bundle_dir: Path,
     regime_index: int,
@@ -98,6 +152,17 @@ def run_narma_benchmark(
     # 1. Generate NARMA-10 signal
     narma_seed = cfg.narma_seed + seed_offset
     u, y = generate_narma10(cfg.K_total, seed=narma_seed)
+
+    # 1b. TDL baseline (deterministic, no Brian2 needed, same splits)
+    tdl_baseline = _tdl_baseline(
+        u, y,
+        D=cfg.n_delays,
+        K_warmup=cfg.K_warmup,
+        K_train=cfg.K_train,
+        K_test=cfg.K_test,
+        ridge_cv_folds=cfg.ridge_cv_folds,
+        ridge_seed=cfg.ridge_seed,
+    )
 
     # 2. Prepare NARMA drive for Brian2
     # Brian2 sim duration: brian_warmup + K_total * dt_task_ms
@@ -283,6 +348,8 @@ def run_narma_benchmark(
         "ridge_seed": cfg.ridge_seed,
         "status": status,
         "pct_silent": pct_silent,
+        # TDL baseline: ridge on [u(t-1),..,u(t-D)], same splits/normalization
+        **tdl_baseline,
     }
 
     return result
